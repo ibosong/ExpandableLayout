@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_height="wrap_content"
+    android:layout_width="match_parent">
+
+    <com.bosong.expandablelayout.ExpandableLayout
+        android:id="@+id/expandable_layout"
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/white"
+        android:layout_margin="10dp">
+        <TextView
+            android:id="@+id/tv_title"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/item_height"
+            android:layout_marginBottom="10dp"
+            android:textSize="16dp"
+            android:textColor="@android:color/black"
+            android:text="CommentGallery"
+            android:gravity="center"/>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/item_height"
+            android:text="An android image gallery with Fresco.\n https://github.com/ibosong/CommentGallery"
+            android:background="#332288"
+            android:autoLink="web"/>
+    </com.bosong.expandablelayout.ExpandableLayout>
+</FrameLayout>

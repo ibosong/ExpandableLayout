@@ -271,18 +271,17 @@ public class ExpandableLayout extends LinearLayout{
      * @return
      */
     private int getDescendantBottom(ViewGroup parent, View view){
-        int bottom = 0;
+        if(parent == null || view == null){
+            return 0;
+        }
+        int height = 0;
         if(view.getLayoutParams() instanceof MarginLayoutParams){
             MarginLayoutParams lp = (MarginLayoutParams) view.getLayoutParams();
-            bottom = lp.bottomMargin;
+            height = lp.bottomMargin;
         }
 
-        bottom += view.getBottom();
-        if(view.getParent() == parent){
-            return bottom;
-        }else{
-            return bottom + getDescendantTop(parent, (View) view.getParent());
-        }
+        height += view.getMeasuredHeight();
+        return height + getDescendantTop(parent, view);
     }
 
     /**
@@ -292,6 +291,9 @@ public class ExpandableLayout extends LinearLayout{
      * @return
      */
     private int getDescendantTop(ViewGroup parent, View view) {
+        if(parent == null || view == null){
+            return 0;
+        }
         int top = view.getTop();
         if(view.getParent() == parent){
             return top;

@@ -50,6 +50,7 @@ public class ExpandableLayout extends LinearLayout{
     private boolean mCollapseWithScroll; // true to scroll to ExpandableLayout's head
     private int mExpandScrollOffset;
     private int mCollapseScrollOffset;
+    private boolean mAnimating;
 
     private OnExpandListener mOnExpandListener;
 
@@ -75,6 +76,7 @@ public class ExpandableLayout extends LinearLayout{
      */
     public void setCollapsedHeight(int height) {
         mCollapsedHeight = height;
+        mCurrentHeight = height;
     }
 
     /**
@@ -82,16 +84,11 @@ public class ExpandableLayout extends LinearLayout{
      * @param view Last view in collapsed state
      */
     public void setCollapsedEdgeView(View view){
-        mLastView = view;
-        if(mLastView != null){
-            mLastView.post(new Runnable() {
-                @Override
-                public void run() {
-                    mCollapsedHeight = getDescendantBottom(ExpandableLayout.this, mLastView);
-                    initState(true);
-                }
-            });
+        if(view == null){
+            return;
         }
+        mLastView = view;
+        requestLayout();
     }
 
     // Not Supported
@@ -147,13 +144,30 @@ public class ExpandableLayout extends LinearLayout{
         int width = getMeasuredWidth();
         int height = getMeasuredHeight();
 
-        if(mInitialMeasure) {
-            if(mExpandedHeight < height) {
-                mExpandedHeight = height;
-            }
+        if(mExpandedHeight == 0 || mExpandedHeight > height) {
+            mExpandedHeight = height;
         }
+
         if(mCurrentHeight >= 0 && height != mCurrentHeight) {
             setMeasuredDimension(width, mCurrentHeight);
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        if(mLastView != null && !mAnimating && mCollapsed) {
+            int collapsedHeight = getDescendantBottom(ExpandableLayout.this, mLastView);
+            if(collapsedHeight > 0 && mCollapsedHeight != collapsedHeight) {
+                mCollapsedHeight = collapsedHeight;
+                mCurrentHeight = collapsedHeight;
+                mLastView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        requestLayout();
+                    }
+                });
+            }
         }
     }
 
@@ -173,6 +187,7 @@ public class ExpandableLayout extends LinearLayout{
         animation.setAnimationListener(new Animation.AnimationListener() {
             @Override
             public void onAnimationStart(Animation animation) {
+                mAnimating = true;
             }
 
             @Override
@@ -202,6 +217,8 @@ public class ExpandableLayout extends LinearLayout{
                         listView.smoothScrollBy(scrollDistanceY, ANIMATION_DURATION);
                     }
                 }
+
+                mAnimating = false;
             }
 
             @Override

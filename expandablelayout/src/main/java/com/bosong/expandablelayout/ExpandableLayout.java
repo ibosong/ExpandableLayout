@@ -71,15 +71,6 @@ public class ExpandableLayout extends LinearLayout{
     }
 
     /**
-     * Set height in collapsed state
-     * @param height
-     */
-    public void setCollapsedHeight(int height) {
-        mCollapsedHeight = height;
-        mCurrentHeight = height;
-    }
-
-    /**
      * Set a View, we will collapsed Views after this View.
      * @param view Last view in collapsed state
      */
@@ -156,19 +147,25 @@ public class ExpandableLayout extends LinearLayout{
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         super.onLayout(changed, l, t, r, b);
-        if(mLastView != null && !mAnimating && mCollapsed) {
-            int collapsedHeight = getDescendantBottom(ExpandableLayout.this, mLastView);
-            if(collapsedHeight > 0 && mCollapsedHeight != collapsedHeight) {
-                mCollapsedHeight = collapsedHeight;
-                mCurrentHeight = collapsedHeight;
-                mLastView.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        requestLayout();
-                    }
-                });
+        if(!mAnimating && mCollapsed) {
+            if(mLastView != null) {
+                int collapsedHeight = getDescendantBottom(ExpandableLayout.this, mLastView);
+                if(collapsedHeight > 0 && mCollapsedHeight != collapsedHeight) {
+                    mCollapsedHeight = collapsedHeight;
+                    mCurrentHeight = collapsedHeight;
+                    mLastView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            requestLayout();
+                        }
+                    });
+                }
+            } else {
+                mCollapsedHeight = 0;
+                mCurrentHeight = 0;
             }
         }
+
     }
 
     public void toggle(){
@@ -308,15 +305,20 @@ public class ExpandableLayout extends LinearLayout{
      * @return
      */
     private int getDescendantTop(ViewGroup parent, View view) {
-        if(parent == null || view == null){
+        if(parent == null || view == null || view.getParent() == null){
             return 0;
         }
-        int top = view.getTop();
-        if(view.getParent() == parent){
-            return top;
-        }else{
-            return top + getDescendantTop(parent, (View) view.getParent());
+        if(view.getParent() instanceof View) {
+            int top = view.getTop();
+            if(view.getParent() == parent){
+                return top;
+            }else{
+                return top + getDescendantTop(parent, (View) view.getParent());
+            }
+        } else { // view.getParent() is a ViewRootImpl instance means that parent does not contains view
+            throw new RuntimeException("view must be included in the parent");
         }
+
     }
 
     class ExpandCollapseAnimation extends Animation {

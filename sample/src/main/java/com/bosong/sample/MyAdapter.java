@@ -54,6 +54,6 @@ public class MyAdapter extends RecyclerView.Adapter {
 
     private void onExpandClick(int position, ExpandableLayout expandableLayout) {
         mExpandState[position] = !mExpandState[position];
-        expandableLayout.toggle();
+        expandableLayout.toggleWithAnimation();
     }
 }

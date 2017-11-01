@@ -19,6 +19,7 @@ import android.content.Context;
 import android.support.annotation.Nullable;
 import android.support.v7.widget.RecyclerView;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -32,25 +33,56 @@ import android.widget.LinearLayout;
  */
 
 public class ExpandableLayout extends LinearLayout{
+    private static final String TAG = "ExpandableLayout";
     private final int ANIMATION_DURATION = 300;
 
+    /**
+     *  Height in collapsed state
+     *  收缩起来的高度
+     */
     private int mCollapsedHeight;
+    /**
+     *  Height in expanded state
+     *  展开的高度
+     */
     private int mExpandedHeight;
-    private int mCurrentHeight = -1; // Used for animating
-
-    private boolean mCollapsed = true; // current state: true -> collapsed
-    private boolean mInitialMeasure = true;
-
+    /**
+     *  Used in OnMeasure method
+     */
+    private int mCurrentHeight = -1;
+    /**
+     *  current state: true -> collapsed
+     *  标记当前的状态 true -> 收缩
+     */
+    private boolean mCollapsed = true;
+    /**
+     *  The parent which can scroll (RecyclerView, ListView)
+     *  可滚动的父布局
+     */
     private ViewGroup mScrolledParent;
-    private View mLastView; // Last view in collapsed state
+    /**
+     *  Last visible view in collapsed state
+     *  收缩后最下面的View，通过这个view计算得到收缩后的高度
+     */
+    private View mLastView;
     private View mAnchorView;
+    /**
+     *  Offset for collapsed height
+     *  收缩起来高度的偏移
+     */
     private int mCollapsedOffset;
+    /**
+     * Offset for expanded height
+     *
+     */
     private int mExpandedOffset;
     private boolean mExpandWithScroll; // true to scroll parent if expanded content exceeds parent's bottom edge
     private boolean mCollapseWithScroll; // true to scroll to ExpandableLayout's head
     private int mExpandScrollOffset;
     private int mCollapseScrollOffset;
     private boolean mAnimating;
+
+    private ExpandCollapseAnimation mAnimation;
 
     private OnExpandListener mOnExpandListener;
 
@@ -61,6 +93,51 @@ public class ExpandableLayout extends LinearLayout{
     public ExpandableLayout(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         setOrientation(VERTICAL);
+
+        mAnimation = new ExpandCollapseAnimation();
+        mAnimation.setFillAfter(true);
+        mAnimation.setAnimationListener(new Animation.AnimationListener() {
+            @Override
+            public void onAnimationStart(Animation animation) {
+                mAnimating = true;
+            }
+
+            @Override
+            public void onAnimationEnd(Animation animation) {
+                // clear animation here to avoid repeated applyTransformation() calls
+                clearAnimation();
+
+                if (mOnExpandListener != null) {
+                    mOnExpandListener.onExpand(!mCollapsed);
+                }
+
+                if (mScrolledParent != null) {
+                    int scrollDistanceY = 0;
+                    if (mExpandWithScroll && !mCollapsed && expandShouldScrollParent()) {
+                        scrollDistanceY = getDescendantBottom((ViewGroup) mScrolledParent.getParent(), ExpandableLayout.this)
+                                - mScrolledParent.getBottom() + mExpandScrollOffset;
+                    } else if (mCollapseWithScroll && collapsedShouldScrollParent()) {
+                        scrollDistanceY = getDescendantTop((ViewGroup) mScrolledParent.getParent(), ExpandableLayout.this)
+                                - mScrolledParent.getTop() - mCollapseScrollOffset;
+                    }
+
+                    if (mScrolledParent instanceof RecyclerView) {
+                        RecyclerView recyclerView = (RecyclerView) mScrolledParent;
+                        recyclerView.smoothScrollBy(0, scrollDistanceY);
+                    } else if (mScrolledParent instanceof AbsListView) {
+                        AbsListView listView = (AbsListView) mScrolledParent;
+                        listView.smoothScrollBy(scrollDistanceY, ANIMATION_DURATION);
+                    }
+                }
+
+                mAnimating = false;
+            }
+
+            @Override
+            public void onAnimationRepeat(Animation animation) {
+
+            }
+        });
     }
 
     @Override
@@ -71,15 +148,34 @@ public class ExpandableLayout extends LinearLayout{
     }
 
     /**
-     * Set a View, we will collapsed Views after this View.
+     * Set a View, we will collapse views under this view in the screen.
      * @param view Last view in collapsed state
      */
     public void setCollapsedEdgeView(View view){
-        if(view == null){
+        if(view == null || view.equals(mLastView)){
             return;
         }
         mLastView = view;
-        requestLayout();
+
+        measure(0, 0);
+        int width = getMeasuredWidth();
+        int height = getMeasuredHeight();
+        layout(0, 0, width, height);
+
+        int collapsedHeight = getDescendantBottom(ExpandableLayout.this, mLastView) + mCollapsedOffset;
+        if(collapsedHeight > 0 && mCollapsedHeight != collapsedHeight) {
+            Log.d(TAG, "collapsedHeight ->>>>> " + collapsedHeight);
+            mCollapsedHeight = collapsedHeight;
+            mCurrentHeight = collapsedHeight;
+        }
+    }
+
+    public void setCollapsedEdgeView(View view, int collapsedOffset) {
+        if(view == null) {
+            return;
+        }
+        mCollapsedOffset = collapsedOffset;
+        setCollapsedEdgeView(view);
     }
 
     // Not Supported
@@ -119,122 +215,38 @@ public class ExpandableLayout extends LinearLayout{
     }
 
     public void initState(boolean collapsed){
-        if(collapsed){
-            mCurrentHeight = mCollapsedHeight;
+        if(collapsed){ // init as collapsed
+            collapse(false);
         }else{
-            mCurrentHeight = mExpandedHeight;
+            expand(false);
         }
-        mCollapsed = collapsed;
-        requestLayout();
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
-        int width = getMeasuredWidth();
-        int height = getMeasuredHeight();
-
-        if(mExpandedHeight == 0 || mExpandedHeight > height) {
-            mExpandedHeight = height;
-        }
-
-        if(mCurrentHeight >= 0 && height != mCurrentHeight) {
+        mExpandedHeight = getMeasuredHeight();
+        if(mCurrentHeight >= 0 && mExpandedHeight != mCurrentHeight) {
+            int width = getMeasuredWidth();
             setMeasuredDimension(width, mCurrentHeight);
+            Log.d(TAG, "current height ->>>>>> " + mCurrentHeight);
         }
     }
 
-    @Override
-    protected void onLayout(boolean changed, int l, int t, int r, int b) {
-        super.onLayout(changed, l, t, r, b);
-        if(!mAnimating && mCollapsed) {
-            if(mLastView != null) {
-                int collapsedHeight = getDescendantBottom(ExpandableLayout.this, mLastView);
-                if(collapsedHeight > 0 && mCollapsedHeight != collapsedHeight) {
-                    mCollapsedHeight = collapsedHeight;
-                    mCurrentHeight = collapsedHeight;
-                    mLastView.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            requestLayout();
-                        }
-                    });
-                }
-            } else {
-                mCollapsedHeight = 0;
-                mCurrentHeight = 0;
-            }
+    public void toggle(boolean withAnimation){
+        if(mAnimating) {
+            return;
         }
-
+        if (mCollapsed) { // need expand
+            expand(withAnimation);
+        } else { // need collapsed
+            collapse(withAnimation);
+        }
     }
 
-    public void toggle(){
-        mInitialMeasure = false;
-
-        clearAnimation();
-        Animation animation;
-        if(mCollapsed){ // need expand
-            animation = new ExpandCollapseAnimation(getHeight(), mExpandedHeight + mExpandedOffset);
-        }else { // need collapsed
-            animation = new ExpandCollapseAnimation(getHeight(), mCollapsedHeight + mCollapsedOffset);
-        }
-
-        mCollapsed = !mCollapsed;
-        animation.setFillAfter(true);
-        animation.setAnimationListener(new Animation.AnimationListener() {
-            @Override
-            public void onAnimationStart(Animation animation) {
-                mAnimating = true;
-            }
-
-            @Override
-            public void onAnimationEnd(Animation animation) {
-                // clear animation here to avoid repeated applyTransformation() calls
-                clearAnimation();
-
-                if(mOnExpandListener != null) {
-                    mOnExpandListener.onExpand(!mCollapsed);
-                }
-
-                if(mScrolledParent != null){
-                    int scrollDistanceY = 0;
-                    if(mExpandWithScroll && !mCollapsed && expandShouldScrollParent()){
-                        scrollDistanceY = getDescendantBottom((ViewGroup) mScrolledParent.getParent(), ExpandableLayout.this)
-                                - mScrolledParent.getBottom() + mExpandScrollOffset;
-                    }else if(mCollapseWithScroll && collapsedShouldScrollParent()){
-                        scrollDistanceY = getDescendantTop((ViewGroup) mScrolledParent.getParent(), ExpandableLayout.this)
-                                - mScrolledParent.getTop() - mCollapseScrollOffset;
-                    }
-
-                    if(mScrolledParent instanceof RecyclerView){
-                        RecyclerView recyclerView = (RecyclerView) mScrolledParent;
-                        recyclerView.smoothScrollBy(0, scrollDistanceY);
-                    }else if(mScrolledParent instanceof AbsListView) {
-                        AbsListView listView = (AbsListView) mScrolledParent;
-                        listView.smoothScrollBy(scrollDistanceY, ANIMATION_DURATION);
-                    }
-                }
-
-                mAnimating = false;
-            }
-
-            @Override
-            public void onAnimationRepeat(Animation animation) {
-
-            }
-        });
-
-        startAnimation(animation);
-
-        // Collapse/Expand with no animation
-//        ViewGroup.LayoutParams lp =  getLayoutParams();
-//        if(mCollapsed){
-//            lp.height = mExpandedHeight;
-//        }else{
-//            lp.height = mCollapsedHeight;
-//        }
-//        setLayoutParams(lp);
-//        mCollapsed = !mCollapsed;
+    public void toggleWithAnimation() {
+        toggle(true);
     }
 
     /**
@@ -242,10 +254,36 @@ public class ExpandableLayout extends LinearLayout{
      * @param expandedOffset Add offset to expanded height
      * @param collapsedOffset Add offset to collapsed height
      */
-    public void toggle(int expandedOffset, int collapsedOffset){
+    public void toggleWithOffset(int expandedOffset, int collapsedOffset){
         mExpandedOffset = expandedOffset;
         mCollapsedOffset = collapsedOffset;
-        toggle();
+        mExpandedHeight += mExpandedOffset;
+        mCollapsedHeight += mCollapsedOffset;
+        toggle(true);
+    }
+
+    public void expand(boolean withAnimation) {
+        if(withAnimation && mAnimation != null) {
+            clearAnimation();
+            mAnimation.setData(getHeight(), mExpandedHeight);
+            startAnimation(mAnimation);
+        } else {
+            mCurrentHeight = mExpandedHeight;
+            requestLayout();
+        }
+        mCollapsed = false;
+    }
+
+    public void collapse(boolean withAnimation) {
+        if(withAnimation && mAnimation != null) {
+            clearAnimation();
+            mAnimation.setData(getHeight(), mCollapsedHeight);
+            startAnimation(mAnimation);
+        } else {
+            mCurrentHeight = mCollapsedHeight;
+            requestLayout();
+        }
+        mCollapsed = true;
     }
 
     private boolean expandShouldScrollParent() {
@@ -315,20 +353,27 @@ public class ExpandableLayout extends LinearLayout{
             }else{
                 return top + getDescendantTop(parent, (View) view.getParent());
             }
-        } else { // view.getParent() is a ViewRootImpl instance means that parent does not contains view
+        } else { // view.getParent() is a ViewRootImpl instance means that parent does not contain this view
             throw new RuntimeException("view must be included in the parent");
         }
-
     }
 
-    class ExpandCollapseAnimation extends Animation {
-        private final int mStartHeight;
-        private final int mEndHeight;
+    private class ExpandCollapseAnimation extends Animation {
+        private int mStartHeight;
+        private int mEndHeight;
+
+        public ExpandCollapseAnimation() {
+            setDuration(ANIMATION_DURATION);
+        }
 
         public ExpandCollapseAnimation(int startHeight, int endHeight) {
+            setData(startHeight, endHeight);
+            setDuration(ANIMATION_DURATION);
+        }
+
+        public void setData(int startHeight, int endHeight) {
             mStartHeight = startHeight;
             mEndHeight = endHeight;
-            setDuration(ANIMATION_DURATION);
         }
 
         @Override
@@ -342,11 +387,12 @@ public class ExpandableLayout extends LinearLayout{
             }
 
             mCurrentHeight = newHeight + heightOffset;
+
             requestLayout();
         }
     }
 
-    public interface OnExpandListener{
+    interface OnExpandListener{
         void onExpand(boolean expand);
 
         /**

@@ -157,17 +157,8 @@ public class ExpandableLayout extends LinearLayout{
         }
         mLastView = view;
 
-        measure(0, 0);
-        int width = getMeasuredWidth();
-        int height = getMeasuredHeight();
-        layout(0, 0, width, height);
-
-        int collapsedHeight = getDescendantBottom(ExpandableLayout.this, mLastView) + mCollapsedOffset;
-        if(collapsedHeight > 0 && mCollapsedHeight != collapsedHeight) {
-            Log.d(TAG, "collapsedHeight ->>>>> " + collapsedHeight);
-            mCollapsedHeight = collapsedHeight;
-            mCurrentHeight = collapsedHeight;
-        }
+        requestLayout();
+        invalidate();
     }
 
     public void setCollapsedEdgeView(View view, int collapsedOffset) {
@@ -225,6 +216,19 @@ public class ExpandableLayout extends LinearLayout{
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+
+        if(mCollapsedHeight == 0) {
+            int width = getMeasuredWidth();
+            int height = getMeasuredHeight();
+            layout(0, 0, width, height);
+
+            int collapsedHeight = getDescendantBottom(ExpandableLayout.this, mLastView) + mCollapsedOffset;
+            if(collapsedHeight > 0 && mCollapsedHeight != collapsedHeight) {
+                Log.d(TAG, "collapsedHeight ->>>>> " + collapsedHeight);
+                mCollapsedHeight = collapsedHeight;
+                mCurrentHeight = collapsedHeight;
+            }
+        }
 
         mExpandedHeight = getMeasuredHeight();
         if(mCurrentHeight >= 0 && mExpandedHeight != mCurrentHeight) {
